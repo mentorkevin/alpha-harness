@@ -1,5 +1,5 @@
 /**
- * The one way the frontend talks to the local backend.
+ * The one way the frontend talks to the backend.
  *
  * The backend answers errors in four shapes — `{error:{code,message}}` from typed
  * exceptions, `{detail:{code,message}}` or `{detail:"text"}` from router refusals,
@@ -40,7 +40,7 @@ export class ApiError extends Error {
 }
 
 function describe(status: number): string {
-  if (status === 0) return 'Cannot reach the Alpha Harness backend. Start it on port 8000 and try again.'
+  if (status === 0) return 'Cannot reach the Alpha Harness backend.'
   if (status >= 500) return 'The backend failed while handling that request.'
   return `The request was refused (${status}).`
 }
@@ -82,13 +82,17 @@ export function normalise(status: number, raw: unknown): ApiErrorBody {
   return { code: `http_${status}`, message: describe(status) }
 }
 
+const BASE_URL = import.meta.env.VITE_API_URL ?? '' // <-- FIX 1: reads env var
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const url = `${BASE_URL}${path}` // <-- FIX 2: use full url
   let response: Response
   try {
-    response = await fetch(path, {
+    response = await fetch(url, {
       method,
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: 'include', // <-- FIX 3: send cookies cross-site
     })
   } catch {
     throw new ApiError(0, { code: 'backend_unreachable', message: describe(0) })
@@ -128,4 +132,4 @@ export function qs(params: Record<string, string | number | boolean | null | und
 /** A message for a toast or an Alert, from anything a query or mutation threw. */
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.'
-}
+    }
