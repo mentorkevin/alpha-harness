@@ -1,6 +1,16 @@
 fastapi
 uvicorn[standard]
 pydantic
+pydantic-settings
 httpx
 python-multipart
 python-dotenv
+aiosqlite
+cryptography
+duckdb
+google-genai
+optuna
+pyarrow
+pyyaml
+sqlalchemy[asyncio]
+structlog
