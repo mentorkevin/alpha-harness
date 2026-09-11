@@ -1,8 +1,11 @@
 /**
- * The one way the frontend talks to the backend.
+ * The one way the frontend talks to the local backend.
+ *
+ * The backend answers errors in four shapes — `{error:{code,message}}` from typed
+ * exceptions, `{detail:{code,message}}` or `{detail:"text"}` from router refusals,
+ * `{detail:[…]}` from request validation, and a plain-text 500 — and every one of them
+ * is folded into an `ApiError` carrying a stable `code` and a message fit to show.
  */
-
-const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 export interface ApiErrorBody {
   code: string
@@ -37,13 +40,14 @@ export class ApiError extends Error {
 }
 
 function describe(status: number): string {
-  if (status === 0) return 'Cannot reach the Alpha Harness backend.'
+  if (status === 0) return 'Cannot reach the Alpha Harness backend. Start it on port 8000 and try again.'
   if (status >= 500) return 'The backend failed while handling that request.'
   return `The request was refused (${status}).`
 }
 
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value.trim() : undefined)
 
+/** BRAIN's own wording often sits in `detail` or `fields.detail`; it is the useful part. */
 function fromObject(status: number, o: Record<string, unknown>): ApiErrorBody {
   const fields = o.fields as Record<string, unknown> | undefined
   const fieldDetail = Array.isArray(fields?.detail) ? (fields.detail as unknown[]).map(String).join(' ') : text(fields?.detail)
@@ -79,14 +83,12 @@ export function normalise(status: number, raw: unknown): ApiErrorBody {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const url = `${BASE_URL}${path}` // <-- THIS IS THE FIX
   let response: Response
   try {
-    response = await fetch(url, {
+    response = await fetch(path, {
       method,
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: 'include', // <-- important for cookies/auth
     })
   } catch {
     throw new ApiError(0, { code: 'backend_unreachable', message: describe(0) })
@@ -99,7 +101,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (raw) {
     try {
       parsed = JSON.parse(raw)
-    } catch {}
+    } catch {
+      // Plain text: an unhandled 500, kept as-is for the message.
+    }
   }
 
   if (!response.ok) throw new ApiError(response.status, normalise(response.status, parsed))
@@ -108,17 +112,20 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const http = {
   get: <T>(path: string) => request<T>('GET', path),
+  /** Bodies default to `{}`: several routes require a body even when every field is optional. */
   post: <T>(path: string, body: unknown = {}) => request<T>('POST', path, body),
   put: <T>(path: string, body: unknown = {}) => request<T>('PUT', path, body),
   patch: <T>(path: string, body: unknown = {}) => request<T>('PATCH', path, body),
   del: <T>(path: string) => request<T>('DELETE', path),
 }
 
+/** `?a=1&b=x` from the defined entries, or an empty string. */
 export function qs(params: Record<string, string | number | boolean | null | undefined>): string {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
   return entries.length ? `?${new URLSearchParams(entries.map(([k, v]): [string, string] => [k, String(v)])).toString()}` : ''
 }
 
+/** A message for a toast or an Alert, from anything a query or mutation threw. */
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.'
 }
