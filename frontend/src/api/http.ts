@@ -2,7 +2,7 @@
  * The one way the frontend talks to the backend.
  */
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? ''
+const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 export interface ApiErrorBody {
   code: string
